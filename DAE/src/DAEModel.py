@@ -25,7 +25,7 @@ class DAEModel(object):
     def add_placeholders_op(self):
         self.input_placeholder = tf.placeholder(tf.float32)
         # TODO do this in TF or NP?
-        self.known_placeholder = tf.placeholder(tf.float32) # K, TODO not necessary, wait & see if bottleneck
+        self.known_placeholder = tf.placeholder(tf.float32) # K
         self.mask_placeholder = tf.placeholder(tf.float32)  # M
 
     def build_autoencoder_op(self):
