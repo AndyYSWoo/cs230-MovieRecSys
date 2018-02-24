@@ -5,10 +5,6 @@ from config import config
 class DAEModel(object):
     def __init__(self, config):
         self.config = config
-        # TODO delay building to self.run()
-        self.N = self.config.N
-        self.M = self.config.M
-        self.build()
 
     def build(self):
         self.add_placeholders_op()
@@ -57,7 +53,13 @@ class DAEModel(object):
         pass
 
     def run(self):
-        pass
+        # TODO load data & set N, M accordingly
+
+        self.N = self.config.N
+        self.M = self.config.M
+        self.build()
+        self.initialize()
+        self.train()
 
 
 if __name__=='__main__':
