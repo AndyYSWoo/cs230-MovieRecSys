@@ -15,10 +15,10 @@ class config():
     activation  = tf.nn.relu        # hidden layers' activation
 
     # training hyperparameters
-    num_epochs  = 100
+    num_epochs  = 50
     batch_size  = 500
     lr          = 1e-3
-    lambd       = 0.0
+    lambd       = 0.5
     alpha       = 1
     beta        = 0.5
     shuffle     = True
