@@ -1,15 +1,16 @@
 
 # coding: utf-8
 
-# In[54]:
+# In[115]:
 
 import csv
 import collections
 import numpy as np
 import pickle
+from sets import Set
 
 
-# In[55]:
+# In[116]:
 
 def countUsers(filename):
     with open(filename) as csvDataFile:
@@ -25,59 +26,129 @@ def countUsers(filename):
     return userNum
 
 
-# In[58]:
+# In[117]:
 
-movieNum = 45843 # total number of movies in the dataset
-userNum = 20133 # num of users who make more than 300 ratings
+movieNum = 28562 # total number of valid movies in the dataset
+userNum = 7941 # num of users who make more than 300 ratings
 
 matrix = np.zeros((userNum, movieNum)) 
 
-colToMovieid = np.zeros(movieNum)
-movieidToCol = collections.defaultdict(int)
+colToMovieid = dict()
+movieidToCol = dict()
 
-movieOverview = collections.defaultdict(str)
-movieGenre = collections.defaultdict(str)
-movieKeyword = collections.defaultdict(str)
+movieOverview = dict()
+movieGenre = dict()
+movieKeyword = dict()
 
-tmbdidToMovieid = collections.defaultdict(int)
-movieidToTmbdid = collections.defaultdict(int)
+tmbdidToMovieid = dict()
+movieidToTmbdid = dict()
+
+validTmbdid = Set()
 
 
-# In[59]:
+# In[118]:
+
+def findValid(metadata, keyword):
+    overviews = Set()
+    with open(metadata) as csvDataFile:
+        count = -1
+        userNum = 0
+        csvReader = csv.reader(csvDataFile)
+        for row in csvReader:
+            if count == -1:
+                count = count+1
+                continue;
+            overviews.add(row[5])
+            count += 1
+    
+    keywords = Set()
+    with open(keyword) as csvDataFile:
+        count = -1
+        userNum = 0
+        csvReader = csv.reader(csvDataFile)
+        for row in csvReader:
+            if count == -1:
+                count = count+1
+                continue;
+            keywords.add(row[0])
+            count += 1
+    
+    for overviewid in overviews:
+        if overviewid in keywords:
+            validTmbdid.add(overviewid)
+
+
+# In[119]:
+
+findValid('./the-movies-dataset/movies_metadata.csv', './the-movies-dataset/keywords.csv')
+
+
+# In[120]:
 
 def readLink(filename):
     
         with open(filename) as csvDataFile:
             csvReader = csv.reader(csvDataFile)
             count = -1
+            cnt = 0
+            appeared = Set()
             for row in csvReader:
                 if count == -1:
                     count = count+1
                     continue;
-            
+        
                 movieid = row[0]
-                tmbdid = row[1]
-            
-                colToMovieid[count] = movieid;
+                tmbdid = row[2]
+                
+                if tmbdid not in validTmbdid:
+                    continue
+                
+                if tmbdid in appeared:
+                    cnt += 1
+                    continue
+                    
+                appeared.add(tmbdid)
+                colToMovieid[count] =movieid
+                
                 movieidToCol[movieid] = count
                 
                 tmbdidToMovieid[tmbdid] = movieid
                 movieidToTmbdid[movieid] = tmbdid
                 
                 count = count+1
+        print(count)
+        print cnt
 
 
-# In[60]:
+# In[121]:
+
+readLink('./the-movies-dataset/links.csv')
+
+
+# In[122]:
 
 def readMoviemetadata(filename):
  
     with open(filename) as csvDataFile:
         csvReader = csv.reader(csvDataFile)
-        count = -1;
+        count = -1
         for row in csvReader:
+            if count == -1:
+                    count = count+1
+                    continue;
+                    
             genre = row[3]
             tmbdid = row[5]
-            overview = row[9]
+            overview = row[8]
+            appeared = Set()
+            
+            if tmbdid not in validTmbdid:
+                continue
+                
+            if tmbdid in appeared:
+                    continue
+                    
+            appeared.add(tmbdid)
             movieid = tmbdidToMovieid[tmbdid]
             movieOverview[movieid] = overview
             movieGenre[movieid] = genre
@@ -85,7 +156,17 @@ def readMoviemetadata(filename):
             count = count+1
 
 
-# In[66]:
+# In[123]:
+
+readMoviemetadata('./the-movies-dataset/movies_metadata.csv')
+
+
+# In[124]:
+
+len(movieGenre)
+
+
+# In[125]:
 
 def readKeyword(filename):
  
@@ -93,16 +174,33 @@ def readKeyword(filename):
         csvReader = csv.reader(csvDataFile)
         count = -1;
         for row in csvReader:
+            if count == -1:
+                    count = count+1
+                    continue;
             
             tmbdid = row[0]
             keyword = row[1]
+            appeared = Set()
+            
+            if tmbdid not in validTmbdid:
+                continue
+            
+            if tmbdid in appeared:
+                continue
+                    
+            appeared.add(tmbdid)
             movieid = tmbdidToMovieid[tmbdid]
             movieKeyword[movieid] = keyword
         
             count = count+1
 
 
-# In[62]:
+# In[126]:
+
+readKeyword('./the-movies-dataset/keywords.csv')
+
+
+# In[127]:
 
 def readRating(filename):
     with open(filename) as csvDataFile:
@@ -123,13 +221,19 @@ def readRating(filename):
             
             
             userid = int(row[0])
+            movieid = row[1]
+            rating = row[2]
+            
+            if movieid not in movieidToTmbdid:
+                continue
+                
             if userid != curruser:
                 curruser = userid
                 if cnt >= 50: over50 += 1
                 if cnt >= 100: over100 += 1
                 if cnt >= 200: over200 += 1
                 if cnt >= 300: over300 += 1
-                if cnt >= 300:
+                if cnt >= 50:
                     matrix[userCount] = temp
                     temp = np.zeros(movieNum)
                     userCount += 1
@@ -139,12 +243,7 @@ def readRating(filename):
             else:
                 cnt +=1
             
-            movieid = row[1]
-            rating = row[2]
-            
-            temp[movieidToCol[movieid]] = rating
-            #matrix[userid-1][movieidToCol[movieid]] = rating
-        
+            temp[movieidToCol[movieid]] = rating      
             count = count+1
     
     print count
@@ -154,58 +253,35 @@ def readRating(filename):
     print over300
 
 
-# In[63]:
-
-readLink('./the-movies-dataset/links.csv')
-
-
-# In[64]:
-
-readMoviemetadata('./the-movies-dataset/movies_metadata.csv')
-
-
-# In[67]:
-
-readKeyword('./the-movies-dataset/keywords.csv')
-
-
-# In[68]:
+# In[128]:
 
 readRating('./the-movies-dataset/ratings.csv')
 
 
-# In[69]:
+# In[134]:
 
 matrix.shape
 
 
-# In[76]:
+# In[140]:
 
-selectedMovieOverview = collections.defaultdict(list)
+selectedMovieOverview = dict()
 selectedMovieGenre = []
 selectedMovieKeyword = []
 
 
-# In[74]:
-
-import json
- 
-json_data = "{'id': 80, 'name': 'Crime'}, {'id': 18, 'name': 'Drama'}, {'id': 10769, 'name': 'Foreign'}"
-python_obj = json.loads(json_data)
-print python_obj["name"]
-
-
-# In[78]:
+# In[141]:
 
 import re
 import json
 
-ratings = np.zeros((6672, userNum))
+ratings = np.zeros((2095, userNum))
 movieCount = 0
 over50 = 0;
 over100 = 0;
 over200 = 0;
 over300 = 0;
+rateSum = 0;
 
 for i in range(movieNum):
     cnt = 0
@@ -220,10 +296,10 @@ for i in range(movieNum):
     if cnt >= 50: over50 += 1
     if cnt >= 100: over100 += 1
     if cnt >= 200: over200 += 1
-    if cnt >= 300: 
-        over300 += 1
+    if cnt >= 300: over300 += 1
+    if cnt >= 50:
+        rateSum += cnt
         ratings[movieCount] = temp
-        
         movieid = colToMovieid[i]
         
         overview = movieOverview[movieid]
@@ -233,21 +309,27 @@ for i in range(movieNum):
         selectedMovieOverview[movieCount]= re.sub("[^\w]", " ",  overview).split()
         selectedMovieGenre.append(genre)
         selectedMovieKeyword.append(keyword)
-        
+     
         movieCount += 1
         
 print over50
 print over100
 print over200
 print over300
+print rateSum
 
 
-# In[84]:
+# In[148]:
 
 np.savetxt("ratings.gz", ratings)
 
 
-# In[87]:
+# In[147]:
+
+selectedMovieOverview[1]
+
+
+# In[149]:
 
 with open('movieKeyword', 'wb') as fp:
     pickle.dump(selectedMovieKeyword, fp)
@@ -256,11 +338,15 @@ with open('movieGenre', 'wb') as fp:
     pickle.dump(selectedMovieGenre, fp)
 
 
-# In[88]:
+# In[152]:
 
-f = open("overview.pkl","wb")
-pickle.dump(selectedMovieOverview,f)
-f.close()
+with open('overview.pickle', 'w') as file:
+     file.write(pickle.dumps(selectedMovieOverview)) 
+
+
+# In[150]:
+
+len(selectedMovieKeyword)
 
 
 # In[48]:
