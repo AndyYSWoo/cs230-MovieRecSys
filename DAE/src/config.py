@@ -7,18 +7,18 @@ class config():
     mask_ratio = 0.25
 
     # metadata
-    use_metadata = False
+    use_metadata = True
 
     # architecture hyperparameters
     n_layers    = 1                 # number of hidden layers
-    layer_size  = 1500               # number of nuerons per layer
-    activation  = tf.nn.relu        # hidden layers' activation
+    layer_size  = 500               # number of nuerons per layer
+    activation  = tf.nn.tanh        # hidden layers' activation
 
     # training hyperparameters
     num_epochs  = 50
-    batch_size  = 500
-    lr          = 1e-3
-    lambd       = 0.5
-    alpha       = 1
-    beta        = 0.5
-    shuffle     = True
+    batch_size  = 200
+    lr          = 1e-3  # learning rate
+    lambd       = 0.1   # l2-regularization
+    alpha       = 1     # emphasis on denoising
+    beta        = 0.5   # emphasis on recovering
+    shuffle     = True  # shuffle training data every epoch

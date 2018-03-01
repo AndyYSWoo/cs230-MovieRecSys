@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import pickle
 from config import config
 
 class DAEModel(object):
@@ -21,13 +22,15 @@ class DAEModel(object):
         self.sess.run(init)
 
     def add_placeholders_op(self):
-        self.input_placeholder = tf.placeholder(tf.float32, (None, self.N)) # TODO use metadata
-        self.known_placeholder = tf.placeholder(tf.float32, (None, self.N)) # K
-        self.mask_placeholder = tf.placeholder(tf.float32, (None, self.N))  # M
-
+        self.input_placeholder = tf.placeholder(tf.float32, (None, self.N)) # Original ratings
+        self.known_placeholder = tf.placeholder(tf.float32, (None, self.N)) # Known indices
+        self.mask_placeholder = tf.placeholder(tf.float32, (None, self.N))  # Masked indices
+        self.meta_placeholder = tf.placeholder(tf.float32, (None, self.d)) if self.config.use_metadata else tf.placeholder(tf.float32) # ugly hack
     def build_autoencoder_op(self):
         scope = 'autoencoder'
         out = tf.multiply(self.input_placeholder, (1 - self.mask_placeholder))
+        if self.config.use_metadata:
+            out = tf.concat([out, self.meta_placeholder], axis=1)
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
             for layer in range(config.n_layers):
                 out = tf.contrib.layers.fully_connected(out, self.config.layer_size, activation_fn=tf.nn.tanh,
@@ -51,43 +54,52 @@ class DAEModel(object):
     def add_optimizer_op(self):
         self.train_op = tf.train.AdamOptimizer(learning_rate=self.config.lr).minimize(self.loss)
 
-    def train(self, R_train, K_train, M_train, R_dev, K_dev, M_dev):
+    def train(self, R_train, S_train, K_train, M_train, R_dev, S_dev, K_dev, M_dev):
         data_size = R_train.shape[0]
         indices = np.arange(data_size)
         num_batches_per_epoch = 1 + data_size / self.config.batch_size
         prog = tf.keras.utils.Progbar(target=num_batches_per_epoch * self.config.num_epochs)
-        print 'Initial Dev RMSE: {}'.format(self.evaluate_RMSE(R_dev, K_dev, M_dev))
+        print 'Initial Dev RMSE: {}'.format(self.evaluate_RMSE(R_dev, S_dev, K_dev, M_dev))
         for epoch in range(self.config.num_epochs):
             if self.config.shuffle:
                 np.random.shuffle(indices)
             for minibatch_start in np.arange(0, data_size, self.config.batch_size):
                 minibatch_indices = indices[minibatch_start:minibatch_start + self.config.batch_size]
                 R_batch = R_train[minibatch_indices]
+                S_batch = S_train[minibatch_indices] if self.config.use_metadata else None
                 K_batch = K_train[minibatch_indices]
                 M_batch = M_train[minibatch_indices]
                 # training
                 _, loss = self.sess.run([self.train_op, self.loss], feed_dict={
                     self.input_placeholder: R_batch,
+                    self.meta_placeholder : S_batch,
                     self.known_placeholder: K_batch,
                     self.mask_placeholder : M_batch
                 })
                 prog.update(epoch * num_batches_per_epoch+1+minibatch_start/self.config.batch_size,
                             [('train loss', loss)])
             # eval on dev set
-            dev_rmse = self.evaluate_RMSE(R_dev, K_dev, M_dev)
+            dev_rmse = self.evaluate_RMSE(R_dev, S_dev, K_dev, M_dev)
             print '\nepoch: {}, Dev RMSE: {}'.format(epoch+1, dev_rmse)
 
-    def evaluate_RMSE(self, R, K, M):
+    def evaluate_RMSE(self, R, S, K, M):
         rmse = self.sess.run([self.rmse], feed_dict={
             self.input_placeholder: R,
+            self.meta_placeholder : S,
             self.known_placeholder: K,
-            self.mask_placeholder: np.zeros(M.shape)  # no mask when calculating RMSE
+            self.mask_placeholder : np.zeros(M.shape)  # no mask when calculating RMSE
         })
         return rmse
 
-    def load_data(self, path):
-        # TODO return metadata too
-        return pd.read_csv(path, delimiter=' ', header=None).as_matrix()
+    def load_data(self, rating_path):
+        return pd.read_csv(rating_path, delimiter=' ', header=None).as_matrix()
+
+    def load_metadata(self, metadata_path):
+        meta_fp = open(metadata_path, 'rb')
+        metadata_list = pickle.load(meta_fp)
+        metadata = np.concatenate(metadata_list).reshape((len(metadata_list), metadata_list[0].shape[0]))
+        return metadata
+
 
     def random_data(self):
         N = 6000 # 20133
@@ -109,13 +121,12 @@ class DAEModel(object):
         R[R==-1.5] = 0
 
     def run(self):
-        R = self.load_data('../data/ratings')
-        # R = self.random_data()
+        R = self.load_data('../data/ratings-small')
         self.N = R.shape[1] # number of users
         self.M = R.shape[0] # number of movies
 
         K = self.get_known_indices(R)
-        M = self.get_mask_indices(K)
+        M = self.get_mask_indices(K)    # add noise mask
         self.normalize(R)
 
         if self.config.debug:
@@ -124,19 +135,25 @@ class DAEModel(object):
             m_c = np.count_nonzero(M)
             print 'Density: {}, Known: {}, Mask: {}, Mask Ratio: {}'.format(float(k_c)/(self.N * self.M), k_c, m_c, float(m_c) / k_c)
 
+        # split into train/dev/test sets
         train_size = int(self.M * 0.8)
         dev_size = int(self.M * 0.1)
-
         R_train, R_dev, R_test = np.split(R, [train_size, train_size + dev_size])
         K_train, K_dev, K_test = np.split(K, [train_size, train_size + dev_size])
         M_train, M_dev, M_test = np.split(M, [train_size, train_size + dev_size])
+        if self.config.use_metadata:
+            S = self.load_metadata('../data/overviewVectors')
+            self.d = S.shape[1] # dimension of side infomation
+            S_train, S_dev, S_test = np.split(S, [train_size, train_size + dev_size])
+        else:
+            S_train, S_dev, S_test = None, None, None
         self.M = R_train.shape[0]
 
         self.build()
         self.initialize()
-        self.train(R_train, K_train, M_train, R_dev, K_dev, M_dev)
+        self.train(R_train, S_train, K_train, M_train, R_dev, S_dev, K_dev, M_dev)
 
-        test_rmse = self.evaluate_RMSE(R_test, K_test, M_test)
+        test_rmse = self.evaluate_RMSE(R_test, S_test, K_test, M_test)
         print 'RMSE on test set: {}'.format(test_rmse)
 
 
