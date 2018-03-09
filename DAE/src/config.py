@@ -3,11 +3,13 @@ import tensorflow as tf
 class config():
     debug = True
 
+    use_pca = False
+
     # dataset
     mask_ratio = 0.25
 
     # metadata
-    use_metadata = True
+    use_metadata = False
 
     # architecture hyperparameters
     n_layers    = 1                 # number of hidden layers
