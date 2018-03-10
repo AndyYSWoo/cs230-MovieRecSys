@@ -31,17 +31,35 @@ class DAEModel(object):
 
     def build_autoencoder_op(self):
         scope = 'autoencoder'
+
+        # Add noise
         out = tf.multiply(self.input_placeholder, (1 - self.mask_placeholder))
+
+        # Reduce input into principal components
+        if self.config.use_pca:
+            out = tf.matmul(self.input_placeholder, self.u_reduce) # shape (batch_size, K)
+
+        # Concat metadata to input
         if self.config.use_metadata:
             out = tf.concat([out, self.meta_placeholder], axis=1)
+
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
             for layer in range(config.n_layers):
                 out = tf.contrib.layers.fully_connected(out, self.config.layer_size, activation_fn=tf.nn.tanh,
                                                         weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
                                                         reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
-        out = tf.contrib.layers.fully_connected(out, self.N, activation_fn=tf.nn.tanh,
-                                                        weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
-                                                        reuse=tf.AUTO_REUSE, scope=scope + '-l-out')
+                out = tf.nn.dropout(out, self.config.dropout)
+        # If use pca, recover components then reconstruct full vector
+        if self.config.use_pca:
+            out = tf.contrib.layers.fully_connected(out, self.num_components, activation_fn=tf.nn.tanh,
+                                                            weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
+                                                            reuse=tf.AUTO_REUSE, scope=scope + '-l-out')
+            out = tf.matmul(out, tf.transpose(self.u_reduce))
+        else:
+            out = tf.contrib.layers.fully_connected(out, self.N, activation_fn=tf.nn.tanh,
+                                                            weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
+                                                            reuse=tf.AUTO_REUSE, scope=scope + '-l-out')
+        out = tf.nn.dropout(out, self.config.dropout)
         self.prediction = out
 
     # problem on reduce mean
@@ -82,13 +100,14 @@ class DAEModel(object):
                 num_known = np.count_nonzero(K_batch)
                 M_batch = M_train[minibatch_indices]
                 # training
-                _, loss = self.sess.run([self.train_op, self.loss], feed_dict={
+                feed = {
                     self.input_placeholder: R_batch,
                     self.meta_placeholder : S_batch,
                     self.known_placeholder: K_batch,
                     self.known_num_placeholder: num_known,
                     self.mask_placeholder : M_batch
-                })
+                }
+                _, loss = self.sess.run([self.train_op, self.loss], feed_dict=feed)
                 prog.update(epoch * num_batches_per_epoch+1+minibatch_start/self.config.batch_size,
                             [('train loss', loss)])
                 print ', Train R^2: {}'.format(self.evaluate_R2(R_train, S_train, K_train, M_train)),
@@ -151,7 +170,7 @@ class DAEModel(object):
             cur -= s[k]
             keep = cur / tot
             # print 'k={}, keep={}'.format(k, keep)
-            if keep <= 0.95:
+            if keep <= self.config.keep_variance:
                 print 'For k={}, more than {}% variance is kept.'.format(k+1, keep*100)
                 break
         return k+1, u[:,:k+1]
@@ -170,9 +189,11 @@ class DAEModel(object):
             k_c = np.count_nonzero(K)
             m_c = np.count_nonzero(M)
             print 'Density: {}, Known: {}, Mask: {}, Mask Ratio: {}'.format(float(k_c)/(self.N * self.M), k_c, m_c, float(m_c) / k_c)
+
         if self.config.use_pca:
             self.num_components, self.u_reduce = self.pca(R)
             print self.u_reduce.shape
+            self.u_reduce = tf.convert_to_tensor(self.u_reduce, dtype=tf.float32)
 
         # split into train/dev/test sets
         train_size = int(self.M * 0.8)

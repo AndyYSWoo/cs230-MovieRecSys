@@ -3,10 +3,11 @@ import tensorflow as tf
 class config():
     debug = True
 
-    use_pca = False
+    use_pca = True
 
     # dataset
     mask_ratio = 0.25
+    keep_variance = 0.99
 
     # metadata
     use_metadata = False
@@ -24,3 +25,4 @@ class config():
     alpha       = 1     # emphasis on denoising
     beta        = 0.5   # emphasis on recovering
     shuffle     = True  # shuffle training data every epoch
+    dropout     = 1
