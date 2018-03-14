@@ -26,3 +26,9 @@ class config():
     beta        = 0.5   # emphasis on recovering
     shuffle     = True  # shuffle training data every epoch
     dropout     = 1
+
+    #config for score model
+    n_layers_score = 4
+    layer_size_score = 80
+    vector_dimension = 50
+    like_threshold = 0.5
