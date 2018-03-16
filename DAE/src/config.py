@@ -1,6 +1,7 @@
 import tensorflow as tf
 
 class config():
+    tb_dir = '../tb/'
     debug = True
 
     use_pca = True
@@ -26,6 +27,7 @@ class config():
     beta        = 0.5   # emphasis on recovering
     shuffle     = True  # shuffle training data every epoch
     dropout     = 1
+    max_gradient_norm = 5.0
 
     #config for score model
     n_layers_score = 4

@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import pickle
+import time
 from config import config
 
 class DAEModel(object):
@@ -16,9 +17,10 @@ class DAEModel(object):
         # self.add_RMSE_op()
         self.add_r2_op()
 
+        self.summaries = tf.summary.merge_all()
+
     def initialize(self):
         self.sess = tf.Session()
-        # TODO TensorBoard Monitoring or Logger
         init = tf.global_variables_initializer()
         self.sess.run(init)
 
@@ -70,6 +72,7 @@ class DAEModel(object):
                     + self.config.beta * tf.reduce_sum(
             tf.square(tf.multiply(self.known_placeholder - self.mask_placeholder,
                                   self.input_placeholder-self.prediction)))
+        tf.summary.scalar('loss', self.loss)
     # def add_RMSE_op(self):
     #     self.rmse =  tf.sqrt(tf.reduce_mean(tf.squared_difference(tf.multiply(self.known_placeholder, self.input_placeholder),
     #                                                               tf.multiply(self.known_placeholder, self.prediction))))
@@ -81,9 +84,20 @@ class DAEModel(object):
         self.r2 = 1 - res / tot
 
     def add_optimizer_op(self):
-        self.train_op = tf.train.AdamOptimizer(learning_rate=self.config.lr).minimize(self.loss)
+        params = tf.trainable_variables()
+        gradients = tf.gradients(self.loss, params)
+        self.gradient_norm = tf.global_norm(gradients)
+        clipped_gradients, _ = tf.clip_by_global_norm(gradients, self.config.max_gradient_norm)
+        self.param_norm = tf.global_norm(params)
 
-    def train(self, R_train, S_train, K_train, M_train, R_dev, S_dev, K_dev, M_dev):
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
+        opt = tf.train.AdamOptimizer(learning_rate=self.config.lr)
+        self.train_op = opt.apply_gradients(zip(clipped_gradients, params), global_step=self.global_step)
+
+        # self.train_op = tf.train.AdamOptimizer(learning_rate=self.config.lr).minimize(self.loss)
+
+    def train(self, R_train, S_train, K_train, M_train, R_dev, S_dev, K_dev, M_dev, summary_writer):
+
         data_size = R_train.shape[0]
         indices = np.arange(data_size)
         num_batches_per_epoch = 1 + data_size / self.config.batch_size
@@ -100,19 +114,25 @@ class DAEModel(object):
                 num_known = np.count_nonzero(K_batch)
                 M_batch = M_train[minibatch_indices]
                 # training
-                feed = {
+                input_feed = {
                     self.input_placeholder: R_batch,
                     self.meta_placeholder : S_batch,
                     self.known_placeholder: K_batch,
                     self.known_num_placeholder: num_known,
                     self.mask_placeholder : M_batch
                 }
-                _, loss = self.sess.run([self.train_op, self.loss], feed_dict=feed)
+                output_feed = [self.train_op, self.summaries, self.loss, self.global_step]
+                _, summaries, loss, global_step = self.sess.run(output_feed, feed_dict=input_feed)
                 prog.update(epoch * num_batches_per_epoch+1+minibatch_start/self.config.batch_size,
                             [('train loss', loss)])
-                print ', Train R^2: {}'.format(self.evaluate_R2(R_train, S_train, K_train, M_train)),
+                train_r2 = self.evaluate_R2(R_train, S_train, K_train, M_train)
+                print ', Train R^2: {}'.format(train_r2),
+                write_summary(train_r2, 'train/r2', summary_writer, global_step)
+                summary_writer.add_summary(summaries, global_step)
             # eval on dev set
-            print '\nepoch: {}, Dev R^2: {}'.format(epoch+1, self.evaluate_R2(R_dev, S_dev, K_dev, M_dev))
+            dev_r2 = self.evaluate_R2(R_dev, S_dev, K_dev, M_dev)
+            print '\nepoch: {}, Dev R^2: {}'.format(epoch+1, dev_r2)
+            write_summary(dev_r2, 'dev/r2', summary_writer, global_step)
 
     # def evaluate_RMSE(self, R, S, K, M):
     #     rmse = self.sess.run([self.rmse], feed_dict={
@@ -124,7 +144,7 @@ class DAEModel(object):
     #     return rmse
 
     def evaluate_R2(self, R, S, K, M):
-        r2 = self.sess.run([self.r2], feed_dict={
+        r2 = self.sess.run(self.r2, feed_dict={
             self.input_placeholder: R,
             self.meta_placeholder : S,
             self.known_placeholder: K,
@@ -211,10 +231,18 @@ class DAEModel(object):
 
         self.build()
         self.initialize()
-        self.train(R_train, S_train, K_train, M_train, R_dev, S_dev, K_dev, M_dev)
+        summary_writer = tf.summary.FileWriter(self.config.tb_dir+time.asctime( time.localtime(time.time())),
+                                               self.sess.graph)
+        self.train(R_train, S_train, K_train, M_train, R_dev, S_dev, K_dev, M_dev, summary_writer)
 
-        print 'R^2 on test set: {}'.format(self.evaluate_R2(R_test, S_test, K_test, M_test))
+        test_r2 = self.evaluate_R2(R_test, S_test, K_test, M_test)
+        print 'R^2 on test set: {}'.format(test_r2)
+        # write_summary(test_r2, 'test/r2', summary_writer, 10000)
 
+def write_summary(value, tag, summary_writer, global_step):
+    summary = tf.Summary()
+    summary.value.add(tag=tag, simple_value=value)
+    summary_writer.add_summary(summary, global_step)
 
 if __name__=='__main__':
     model = DAEModel(config)
