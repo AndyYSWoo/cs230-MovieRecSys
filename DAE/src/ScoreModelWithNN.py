@@ -36,6 +36,8 @@ class ScoreModelWithNN(object):
 
         scope = 'ScoreModelWithNN'
         out = tf.concat([movieEmbed, userEmbed], axis = 2)
+        out = tf.squeeze(out, [1])
+        #print(out.shape)
         #if self.config.use_metadata:
             #out = tf.concat([out, self.meta_placeholder], axis=1)
 
@@ -50,13 +52,13 @@ class ScoreModelWithNN(object):
                                                 weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
                                                 reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
         out = tf.nn.sigmoid(out)
-        #print(tf.shape(out))
         self.prediction = out
 
     def add_loss_op(self):
         transformedLabels = tf.to_double(self.labels_placeholder) * 0.5 + 0.5
         transformedLabels = tf.cast(transformedLabels, tf.float32)
         loss_temp = - transformedLabels * tf.log(self.prediction) - (1.0 - transformedLabels) * tf.log(1.0 - self.prediction)
+        #print(loss_temp.shape)
         self.loss = tf.reduce_mean(tf.to_float(loss_temp))
 
     def add_Accurancy_op(self):
