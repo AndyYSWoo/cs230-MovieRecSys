@@ -38,17 +38,18 @@ class ScoreModel(object):
         product = tf.matmul(movieEmbed, userEmbedT)
         #product = tf.reduce_sum(tf.multiply(movieEmbed, userEmbed), 1, keep_dims=True)
         out = tf.nn.sigmoid(product)
+        out = tf.squeeze(out, [2])
         self.prediction = out
 
     def add_loss_op(self):
         transformedLabels = tf.to_double(self.labels_placeholder) * 0.5 + 0.5
         transformedLabels = tf.cast(transformedLabels, tf.float32)
         loss_temp = - transformedLabels * tf.log(self.prediction) - (1.0 - transformedLabels) * tf.log(1.0 - self.prediction)
-        print(transformedLabels.shape)
-        print(self.labels_placeholder.shape)
+        #print(transformedLabels.shape)
+        #print(self.labels_placeholder.shape)
         temp = transformedLabels * tf.log(self.prediction)
-        print(temp.shape)
-        print(loss_temp.shape)
+        #print(temp.shape)
+        #print(loss_temp.shape)
         self.loss = tf.reduce_mean(tf.to_float(loss_temp))
         #print(self.loss.shape)
 
