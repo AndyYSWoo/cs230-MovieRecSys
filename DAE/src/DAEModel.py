@@ -48,7 +48,7 @@ class DAEModel(object):
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
             for layer in range(config.n_layers):
                 out = tf.contrib.layers.fully_connected(out, self.config.layer_size, activation_fn=tf.nn.tanh,
-                                                        weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
+                                                        #weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
                                                         reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
                 out = tf.nn.dropout(out, self.config.dropout)
         # If use pca, recover components then reconstruct full vector
@@ -59,7 +59,7 @@ class DAEModel(object):
             out = tf.matmul(out, tf.transpose(self.u_reduce))
         else:
             out = tf.contrib.layers.fully_connected(out, self.N, activation_fn=tf.nn.tanh,
-                                                            weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
+                                                            #weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
                                                             reuse=tf.AUTO_REUSE, scope=scope + '-l-out')
         out = tf.nn.dropout(out, self.config.dropout)
         self.prediction = out
@@ -86,13 +86,13 @@ class DAEModel(object):
     def add_optimizer_op(self):
         params = tf.trainable_variables()
         gradients = tf.gradients(self.loss, params)
-        self.gradient_norm = tf.global_norm(gradients)
-        clipped_gradients, _ = tf.clip_by_global_norm(gradients, self.config.max_gradient_norm)
-        self.param_norm = tf.global_norm(params)
+        #self.gradient_norm = tf.global_norm(gradients)
+        #clipped_gradients, _ = tf.clip_by_global_norm(gradients, self.config.max_gradient_norm)
+        #self.param_norm = tf.global_norm(params)
 
         self.global_step = tf.Variable(0, name='global_step', trainable=False)
         opt = tf.train.AdamOptimizer(learning_rate=self.config.lr)
-        self.train_op = opt.apply_gradients(zip(clipped_gradients, params), global_step=self.global_step)
+        self.train_op = opt.apply_gradients(zip(gradients, params), global_step=self.global_step)
 
         # self.train_op = tf.train.AdamOptimizer(learning_rate=self.config.lr).minimize(self.loss)
 
