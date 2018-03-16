@@ -4,7 +4,7 @@ class config():
     tb_dir = '../tb/'
     debug = True
 
-    use_pca = True
+    use_pca = False
 
     # dataset
     mask_ratio = 0.25

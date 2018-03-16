@@ -133,6 +133,13 @@ class DAEModel(object):
             dev_r2 = self.evaluate_R2(R_dev, S_dev, K_dev, M_dev)
             print '\nepoch: {}, Dev R^2: {}'.format(epoch+1, dev_r2)
             write_summary(dev_r2, 'dev/r2', summary_writer, global_step)
+            dev_loss = self.sess.run(self.loss, feed_dict={
+                self.input_placeholder: R_dev,
+                self.meta_placeholder : S_dev,
+                self.known_placeholder: K_dev,
+                self.known_num_placeholder: np.count_nonzero(K_dev),
+                self.mask_placeholder : np.zeros(M_dev.shape)})
+            write_summary(dev_loss, 'dev/loss', summary_writer, global_step)
 
     # def evaluate_RMSE(self, R, S, K, M):
     #     rmse = self.sess.run([self.rmse], feed_dict={
