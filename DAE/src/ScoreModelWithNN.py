@@ -35,23 +35,35 @@ class ScoreModelWithNN(object):
         userEmbed = tf.nn.embedding_lookup(userEmbeddings, self.user_placeholder)
 
         scope = 'ScoreModelWithNN'
-        out = tf.concat([movieEmbed, userEmbed], axis = 2)
-        out = tf.squeeze(out, [1])
+        #out = tf.concat([movieEmbed, userEmbed], axis = 2)
+        #out = tf.squeeze(out, [1])
+        movieOut = tf.squeeze(movieEmbed, [1])
+        userOut = tf.squeeze(userEmbed, [1])
         #print(out.shape)
         #if self.config.use_metadata:
             #out = tf.concat([out, self.meta_placeholder], axis=1)
 
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
-            for layer in range(config.n_layers):
-                out = tf.contrib.layers.fully_connected(out, self.config.layer_size, activation_fn=tf.nn.tanh,
-                                                        weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
+            for layer in range(config.n_layers_score):
+                movieOut = tf.contrib.layers.fully_connected(movieOut, self.config.layer_size_score, activation_fn=tf.nn.tanh,
+                                                        weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd_score),
                                                         reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
-                out = tf.nn.dropout(out, self.config.dropout)
+                movieOut = tf.nn.dropout(movieOut, self.config.dropout)
 
-        out = tf.contrib.layers.fully_connected(out, 1, activation_fn=tf.nn.tanh,
-                                                weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd),
-                                                reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
+                userOut = tf.contrib.layers.fully_connected(userOut, self.config.layer_size_score, activation_fn=tf.nn.tanh,
+                                                        weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd_score),
+                                                        reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
+                userOut = tf.nn.dropout(userOut, self.config.dropout)                
+
+        movieOut = tf.expand_dims(movieOut, axis = 1)
+        userOut = tf.expand_dims(userOut, axis = 2)
+        product = tf.matmul(movieOut, userOut)
+        out = tf.squeeze(product, [2])
         out = tf.nn.sigmoid(out)
+        #out = tf.contrib.layers.fully_connected(out, self.config.layer_size_score, activation_fn=tf.nn.tanh,
+        #                                       weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd_score),
+        #                                       reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
+        
         self.prediction = out
 
     def add_loss_op(self):
