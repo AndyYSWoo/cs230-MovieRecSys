@@ -97,6 +97,8 @@ class ScoreModelWithNN(object):
                 })
                 prog.update(epoch * num_batches_per_epoch+1+minibatch_start/self.config.batch_size,
                             [('train loss', loss)])
+            train_accurancy = self.evaluate_Accurancy(m_train, u_train, l_train)
+            print 'Accurancy on traiin set: {}'.format(train_accurancy)
             # eval on dev set
             dev_accurancy = self.evaluate_Accurancy(m_dev, u_dev, l_dev)
             print '\nepoch: {}, Dev Accurancy: {}'.format(epoch+1, dev_accurancy)
@@ -142,14 +144,10 @@ class ScoreModelWithNN(object):
         R = self.load_data('./ratings-binary.gz')
         self.N = R.shape[1] # number of users
         self.M = R.shape[0] # number of movies
-        #K = self.get_known_indices(R)
         movieArray = self.load_movieArray('./movieArray.gz')
         self.data_size = len(movieArray)
-        #movieArray = tf.reshape(movieArray, (movieArray.shape[0], 1))
         userArray = self.load_movieArray('./userArray.gz')
-        #userArray = tf.reshape(userArray, (len(userArray), 1))
         labelArray = self.load_movieArray('./labelArray.gz')
-        #labelArray = tf.reshape(labelArray, (len(labelArray), 1))
 
         if self.config.debug:
             print '# of Users: {}, # of Movies: {}'.format(self.N, self.M)
@@ -159,9 +157,32 @@ class ScoreModelWithNN(object):
         # split into train/dev/test sets
         self.train_size = int(self.data_size * 0.8)
         self.dev_size = int(self.data_size * 0.1)
-        m_train, m_dev, m_test = np.split(movieArray, [self.train_size, self.train_size + self.dev_size])
-        u_train, u_dev, u_test = np.split(userArray, [self.train_size, self.train_size + self.dev_size])
-        l_train, l_dev, l_test = np.split(labelArray, [self.train_size, self.train_size + self.dev_size])
+
+        indices = np.arange(self.data_size)
+        if self.config.shuffle:
+            np.random.shuffle(indices)
+
+        trainIndex = indices[0 : self.train_size]
+        devIndex = indices[self.train_size : self.train_size + self.dev_size]
+        testIndex = indices[self.train_size + self.dev_size:]
+        
+        m_train = movieArray[trainIndex]
+        m_dev = movieArray[devIndex]
+        m_test = movieArray[testIndex]
+
+        u_train = userArray[trainIndex]
+        u_dev = userArray[devIndex]
+        u_test = userArray[testIndex]
+
+        l_train = labelArray[trainIndex]
+        l_dev = labelArray[devIndex]
+        l_test = labelArray[testIndex]
+
+        #print(m_train.shape)
+
+        #m_train, m_dev, m_test = np.split(movieArray, [self.train_size, self.train_size + self.dev_size])
+        #u_train, u_dev, u_test = np.split(userArray, [self.train_size, self.train_size + self.dev_size])
+        #l_train, l_dev, l_test = np.split(labelArray, [self.train_size, self.train_size + self.dev_size])
 
         #m_train1 = np.reshape(m_train, (m_train.shape[0], 1))
         m_train = np.reshape(m_train, (m_train.shape[0], 1))
