@@ -33,4 +33,5 @@ class config():
     n_layers_score = 4
     layer_size_score = 80
     vector_dimension = 50
+    lambd_score = 0.1
     like_threshold = 0.5
