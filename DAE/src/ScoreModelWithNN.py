@@ -28,18 +28,16 @@ class ScoreModelWithNN(object):
         #self.meta_placeholder = tf.placeholder(tf.float32, (None, self.d)) if self.config.use_metadata else tf.placeholder(tf.float32) 
     
     def build_prediction_op(self):
-        movieEmbeddings= tf.Variable(tf.random_uniform([self.M, self.config.vector_dimension], -1.0, 1.0), dtype = tf.float32)
-        userEmbeddings = tf.Variable(tf.random_uniform([self.N, self.config.vector_dimension], -1.0, 1.0), dtype = tf.float32)
+        with tf.variable_scope("ScoreModel", reuse=tf.AUTO_REUSE):
+            movieEmbeddings = tf.get_variable(name = "movieEmbeddings", shape = [self.M, self.config.vector_dimension], initializer=tf.random_normal_initializer(mean=0, stddev=1))  
+            userEmbeddings = tf.get_variable(name = "userEmbeddings", shape = [self.N, self.config.vector_dimension], initializer=tf.random_normal_initializer(mean=0, stddev=1))  
 
         movieEmbed = tf.nn.embedding_lookup(movieEmbeddings, self.movie_placeholder)
         userEmbed = tf.nn.embedding_lookup(userEmbeddings, self.user_placeholder)
 
         scope = 'ScoreModelWithNN'
-        #out = tf.concat([movieEmbed, userEmbed], axis = 2)
-        #out = tf.squeeze(out, [1])
         movieOut = tf.squeeze(movieEmbed, [1])
         userOut = tf.squeeze(userEmbed, [1])
-        #print(out.shape)
         #if self.config.use_metadata:
             #out = tf.concat([out, self.meta_placeholder], axis=1)
 
@@ -69,20 +67,19 @@ class ScoreModelWithNN(object):
     def add_loss_op(self):
         transformedLabels = tf.to_double(self.labels_placeholder) * 0.5 + 0.5
         transformedLabels = tf.cast(transformedLabels, tf.float32)
-        loss_temp = - transformedLabels * tf.log(self.prediction) - (1.0 - transformedLabels) * tf.log(1.0 - self.prediction)
-        #print(loss_temp.shape)
-        self.loss = tf.reduce_mean(tf.to_float(loss_temp))
+        self.loss = tf.losses.log_loss(labels = transformedLabels, predictions = self.prediction)
+
 
     def add_Accurancy_op(self):
         predictions = tf.cast((self.prediction >= self.config.like_threshold), dtype = tf.int32)
         predictions = predictions * 2 - 1
         product = np.multiply(predictions, self.labels_placeholder)
         product = product - 1
-        zeros = tf.cast(tf.count_nonzero(product), tf.float32)
-        self.accurancy = zeros / tf.cast(tf.size(predictions), tf.float32)
+        nonzeros = tf.cast(tf.count_nonzero(product), tf.float32)
+        self.accurancy = 1.0 - (nonzeros / tf.cast(tf.size(predictions), tf.float32))
 
     def add_optimizer_op(self):
-        self.train_op = tf.train.AdamOptimizer(learning_rate=self.config.lr).minimize(self.loss)
+        self.train_op = tf.train.AdamOptimizer(learning_rate=self.config.lr_score).minimize(self.loss)
 
     def train(self, m_train, u_train, l_train, m_dev, u_dev, l_dev):
         
@@ -91,26 +88,41 @@ class ScoreModelWithNN(object):
         num_batches_per_epoch = 1 + self.train_size / self.config.batch_size
         prog = tf.keras.utils.Progbar(target=num_batches_per_epoch * self.config.num_epochs)
         print 'Initial Dev Accurance: {}'.format(self.evaluate_Accurancy(m_dev, u_dev, l_dev))
+        start = 0
         for epoch in range(self.config.num_epochs):
             if self.config.shuffle:
                 np.random.shuffle(indices)
+
+            if start == 1:
+                with tf.variable_scope("ScoreModel", reuse=tf.AUTO_REUSE):
+                    pre = tf.get_variable(name = "movieEmbeddings", shape = [self.M, self.config.vector_dimension], initializer=tf.random_normal_initializer(mean=0, stddev=1)) 
+                    preArr = self.sess.run(pre)
+
             for minibatch_start in np.arange(0, self.train_size, self.config.batch_size):
                 minibatch_indices = indices[minibatch_start:minibatch_start + self.config.batch_size]
                 m_batch = m_train[minibatch_indices]
                 u_batch = u_train[minibatch_indices] 
-                l_batch = m_train[minibatch_indices]
-                #M_batch = M_train[minibatch_indices]
+                l_batch = l_train[minibatch_indices]
                 # training
                 _, loss = self.sess.run([self.train_op, self.loss], feed_dict={
                     self.movie_placeholder: m_batch,
                     self.user_placeholder : u_batch,
                     self.labels_placeholder: l_batch,
-                    #self.mask_placeholder : M_batch
                 })
                 prog.update(epoch * num_batches_per_epoch+1+minibatch_start/self.config.batch_size,
                             [('train loss', loss)])
+
+            with tf.variable_scope("ScoreModel", reuse=tf.AUTO_REUSE):
+                new = tf.get_variable(name = "movieEmbeddings", shape = [self.M, self.config.vector_dimension], initializer=tf.random_normal_initializer(mean=0, stddev=1))  
+                newArr = self.sess.run(new)
+            
+            if start == 1:
+                diff = np.sum(newArr - preArr)
+                print('\ndiff: {}'.format(diff))
+
+            start = 1
             train_accurancy = self.evaluate_Accurancy(m_train, u_train, l_train)
-            print 'Accurancy on traiin set: {}'.format(train_accurancy)
+            print 'Accurancy on train set: {}'.format(train_accurancy)
             # eval on dev set
             dev_accurancy = self.evaluate_Accurancy(m_dev, u_dev, l_dev)
             print '\nepoch: {}, Dev Accurancy: {}'.format(epoch+1, dev_accurancy)
@@ -153,13 +165,13 @@ class ScoreModelWithNN(object):
         return (R != 0).astype(int)
 
     def run(self):
-        R = self.load_data('./ratings-binary.gz')
+        R = self.load_data('../data/ratings-binary.gz')
         self.N = R.shape[1] # number of users
         self.M = R.shape[0] # number of movies
-        movieArray = self.load_movieArray('./movieArray.gz')
+        movieArray = self.load_movieArray('../data/movieArray-binary.gz')
         self.data_size = len(movieArray)
-        userArray = self.load_movieArray('./userArray.gz')
-        labelArray = self.load_movieArray('./labelArray.gz')
+        userArray = self.load_movieArray('../data/userArray-binary.gz')
+        labelArray = self.load_movieArray('../data/labelArray-binary.gz')
 
         if self.config.debug:
             print '# of Users: {}, # of Movies: {}'.format(self.N, self.M)
@@ -190,13 +202,6 @@ class ScoreModelWithNN(object):
         l_dev = labelArray[devIndex]
         l_test = labelArray[testIndex]
 
-        #print(m_train.shape)
-
-        #m_train, m_dev, m_test = np.split(movieArray, [self.train_size, self.train_size + self.dev_size])
-        #u_train, u_dev, u_test = np.split(userArray, [self.train_size, self.train_size + self.dev_size])
-        #l_train, l_dev, l_test = np.split(labelArray, [self.train_size, self.train_size + self.dev_size])
-
-        #m_train1 = np.reshape(m_train, (m_train.shape[0], 1))
         m_train = np.reshape(m_train, (m_train.shape[0], 1))
         m_dev = np.reshape(m_dev, (m_dev.shape[0], 1))
         m_test = np.reshape(m_test, (m_test.shape[0], 1))
@@ -209,7 +214,6 @@ class ScoreModelWithNN(object):
         l_dev = np.reshape(l_dev, (l_dev.shape[0], 1))
         l_test = np.reshape(l_test, (l_test.shape[0], 1))
 
-        #print(u_dev.shape)
         #if self.config.use_metadata:
             #S = self.load_metadata('../data/overviewVectors')
             #self.d = S.shape[1] # dimension of side infomation
