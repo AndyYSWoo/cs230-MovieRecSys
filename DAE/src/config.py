@@ -30,6 +30,8 @@ class config():
     max_gradient_norm = 500000
 
     #config for score model
+    lr_score = 1e-3
+    batch_size_score = 210 
     n_layers_score = 4
     layer_size_score = 80
     vector_dimension = 50
