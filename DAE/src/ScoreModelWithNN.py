@@ -26,7 +26,6 @@ class ScoreModelWithNN(object):
         self.user_placeholder = tf.placeholder(tf.int32, (None, 1)) # Known indices
         self.labels_placeholder = tf.placeholder(tf.int32, (None, 1))
         self.meta_placeholder = tf.placeholder(tf.float32, (None, self.d)) if self.config.use_metadata else tf.placeholder(tf.float32) # ugly hack
-        #self.meta_placeholder = tf.placeholder(tf.float32, (None, self.d)) if self.config.use_metadata else tf.placeholder(tf.float32) 
     
     def build_prediction_op(self):
         with tf.variable_scope("ScoreModel", reuse=tf.AUTO_REUSE):
@@ -36,7 +35,7 @@ class ScoreModelWithNN(object):
         movieEmbed = tf.nn.embedding_lookup(movieEmbeddings, self.movie_placeholder)
         userEmbed = tf.nn.embedding_lookup(userEmbeddings, self.user_placeholder)
 
-        #scope = 'ScoreModelWithNN'
+        scope = 'ScoreModelWithNN'
         movieOut = tf.squeeze(movieEmbed, [1])
         userOut = tf.squeeze(userEmbed, [1])
 
@@ -46,12 +45,12 @@ class ScoreModelWithNN(object):
         #with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
             #for layer in range(config.n_layers_score):
                 #movieOut = tf.contrib.layers.fully_connected(movieOut, self.config.layer_size_score, activation_fn=tf.nn.tanh,
-                #                                        weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd_score),
-                #                                        reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
+                #                                       weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd_score),
+                #                                         reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
                 #movieOut = tf.nn.dropout(movieOut, self.config.dropout)
 
                 #userOut = tf.contrib.layers.fully_connected(userOut, self.config.layer_size_score, activation_fn=tf.nn.tanh,
-                #                                        weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd_score),
+                #                                         weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd_score),
                 #                                        reuse=tf.AUTO_REUSE, scope=scope + '-l-'+str(layer))
                 #userOut = tf.nn.dropout(userOut, self.config.dropout)                
 
@@ -69,8 +68,8 @@ class ScoreModelWithNN(object):
             for layer in range(config.n_layers_score):
                 userOut = tf.contrib.layers.fully_connected(userOut, self.config.layer_size_score, activation_fn=tf.nn.tanh,
                                                         weights_regularizer=tf.contrib.layers.l2_regularizer(self.config.lambd_score),
-                                                        reuse=tf.AUTO_REUSE, scope=scopeUser + '-l-'+str(layer))
-                userOut = tf.nn.dropout(movieOut, self.config.dropout)
+                                                         reuse=tf.AUTO_REUSE, scope=scopeUser + '-l-'+str(layer))
+                userOut = tf.nn.dropout(userOut, self.config.dropout)
 
         movieOut = tf.expand_dims(movieOut, axis = 1)
         userOut = tf.expand_dims(userOut, axis = 2)
@@ -127,7 +126,6 @@ class ScoreModelWithNN(object):
                 prog.update(epoch * num_batches_per_epoch+1+minibatch_start/self.config.batch_size,
                             [('train loss', loss)])
 
-            start = 1
             train_accurancy = self.evaluate_Accurancy(m_train, u_train, l_train, s_train)
             print 'Accurancy on train set: {}'.format(train_accurancy)
             # eval on dev set
@@ -195,9 +193,9 @@ class ScoreModelWithNN(object):
         self.train_size = int(self.data_size * 0.8)
         self.dev_size = int(self.data_size * 0.1)
 
-        if self.config.use_metadata:
-            metadataArray = self.load_metadata('../data/overviewVectors')
-            self.d = metadataArray.shape[1]
+        #if self.config.use_metadata:
+        metadataArray = self.load_metadata('../data/overviewVectors')
+        self.d = metadataArray.shape[1]
 
         indices = np.arange(self.data_size)
         if self.config.shuffle:

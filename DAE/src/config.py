@@ -11,7 +11,7 @@ class config():
     keep_variance = 0.99
 
     # metadata
-    use_metadata = False
+    use_metadata = True
 
     # architecture hyperparameters
     n_layers    = 4                 # number of hidden layers
@@ -19,7 +19,7 @@ class config():
     activation  = tf.nn.tanh        # hidden layers' activation
 
     # training hyperparameters
-    num_epochs  = 500
+    num_epochs  = 100
     batch_size  = 2100
     lr          = 1e-3  # learning rate
     lambd       = 0   # l2-regularization
@@ -32,8 +32,8 @@ class config():
     #config for score model
     lr_score = 1e-3
     batch_size_score = 210 
-    n_layers_score = 4
-    layer_size_score = 80
+    n_layers_score = 2
+    layer_size_score = 60
     vector_dimension = 50
     lambd_score = 0.1
     like_threshold = 0.5
